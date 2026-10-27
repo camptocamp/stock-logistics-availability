@@ -3,6 +3,7 @@
 
 from unittest import mock
 
+from odoo.fields import Domain
 from odoo.tests.common import TransactionCase
 
 
@@ -54,7 +55,7 @@ class TestStockLocationDomain(TransactionCase):
             return_value=[quant_domain],
         ):
             domain = product_product._get_domain_location_for_locations()
-            self.assertEqual(domain, expected)
+            self.assertEqual(domain, Domain(expected))
 
     def test_domain(self):
         locations = self.env["stock.location"].search(
@@ -93,6 +94,8 @@ class TestStockLocationDomain(TransactionCase):
         self.assertLocationDomain([("id", "=", 1)], [])
 
     def test_quant_domain_parsing_4(self):
+        # A condition on another field of the quant does not restrict the
+        # locations: the alternative it belongs to holds for any location.
         quant_domain = [
             "&",
             "|",
@@ -101,9 +104,7 @@ class TestStockLocationDomain(TransactionCase):
             ("location_id.name", "=", "test2"),
         ]
 
-        self.assertLocationDomain(
-            quant_domain, ["&", ("name", "=", "test"), ("name", "=", "test2")]
-        )
+        self.assertLocationDomain(quant_domain, [("name", "=", "test2")])
 
     def test_quant_domain_parsing_5(self):
         quant_domain = [
@@ -118,13 +119,7 @@ class TestStockLocationDomain(TransactionCase):
 
         self.assertLocationDomain(
             quant_domain,
-            [
-                "&",
-                ("name", "=", "test"),
-                "|",
-                ("name", "=", "test2"),
-                ("name", "=", "test3"),
-            ],
+            ["|", ("name", "=", "test2"), ("name", "=", "test3")],
         )
 
     def test_quant_domain_parsing_6(self):
@@ -138,9 +133,7 @@ class TestStockLocationDomain(TransactionCase):
             ("location_id.name", "=", "test3"),
         ]
 
-        self.assertLocationDomain(
-            quant_domain, ["&", ("name", "=", "test"), ("name", "=", "test3")]
-        )
+        self.assertLocationDomain(quant_domain, [])
 
     def test_quant_domain_parsing_7(self):
         quant_domain = [
@@ -171,9 +164,7 @@ class TestStockLocationDomain(TransactionCase):
             ("location_id.name", "=", "test3"),
         ]
 
-        self.assertLocationDomain(
-            quant_domain, ["|", ("name", "=", "test2"), ("name", "=", "test3")]
-        )
+        self.assertLocationDomain(quant_domain, [])
 
     def test_quant_domain_parsing_9(self):
         quant_domain = [
@@ -188,5 +179,17 @@ class TestStockLocationDomain(TransactionCase):
 
         self.assertLocationDomain(
             quant_domain,
-            ["&", ("name", "=", "test"), "|", ("id", "=", 1), ("name", "=", "test3")],
+            ["|", ("id", "=", 1), ("name", "=", "test3")],
+        )
+
+    def test_quant_domain_parsing_any(self):
+        self.assertLocationDomain(
+            [("location_id", "any", [("name", "=", "test")])],
+            [("name", "=", "test")],
+        )
+
+    def test_quant_domain_parsing_not_any(self):
+        self.assertLocationDomain(
+            [("location_id", "not any", [("name", "=", "test")])],
+            ["!", ("name", "=", "test")],
         )
