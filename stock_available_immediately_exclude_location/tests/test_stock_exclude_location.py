@@ -90,3 +90,76 @@ class TestStockLogisticsWarehouse(TransactionCase):
             location=self.stock_location.id
         )._get_location_ids_excluded_from_immediately_usable_qty()
         self.assertFalse(excluded_location_ids)
+
+    def test_excluded_location_ids_after_moving_a_location(self):
+        """A location moved under an excluded view location becomes excluded.
+
+        The excluded locations are cached: moving a location must refresh them.
+
+        Scenario:
+            1. Exclude the view location, and get the excluded locations.
+            2. Move another location under the excluded view location.
+        Expected:
+            - The moved location is now excluded.
+        """
+        self.pack_location.exclude_from_immediately_usable_qty = True
+        other_location = self.env["stock.location"].create(
+            {"name": "Other Location", "location_id": self.stock_location.id}
+        )
+        self.assertNotIn(
+            other_location.id,
+            self.product._get_location_ids_excluded_from_immediately_usable_qty(),
+        )
+        other_location.location_id = self.pack_location
+        self.assertIn(
+            other_location.id,
+            self.product._get_location_ids_excluded_from_immediately_usable_qty(),
+        )
+
+    def test_excluded_location_ids_after_changing_the_usage(self):
+        """An excluded location turned into a view location excludes its children.
+
+        The excluded locations are cached: changing the usage of a location
+        must refresh them.
+
+        Scenario:
+            1. Exclude an internal location with a child location, and get the
+               excluded locations.
+            2. Turn the excluded location into a view location.
+        Expected:
+            - Its child location is now excluded.
+        """
+        self.pack_location.usage = "internal"
+        self.pack_location.exclude_from_immediately_usable_qty = True
+        self.assertNotIn(
+            self.pack_child_location.id,
+            self.product._get_location_ids_excluded_from_immediately_usable_qty(),
+        )
+        self.pack_location.usage = "view"
+        self.assertIn(
+            self.pack_child_location.id,
+            self.product._get_location_ids_excluded_from_immediately_usable_qty(),
+        )
+
+    def test_excluded_location_ids_after_archiving_a_location(self):
+        """An archived excluded location is no longer excluded.
+
+        The excluded locations are cached: archiving a location must refresh
+        them.
+
+        Scenario:
+            1. Exclude the view location, and get the excluded locations.
+            2. Archive the child location of the excluded view location.
+        Expected:
+            - The archived location is no longer excluded.
+        """
+        self.pack_location.exclude_from_immediately_usable_qty = True
+        self.assertIn(
+            self.pack_child_location.id,
+            self.product._get_location_ids_excluded_from_immediately_usable_qty(),
+        )
+        self.pack_child_location.active = False
+        self.assertNotIn(
+            self.pack_child_location.id,
+            self.product._get_location_ids_excluded_from_immediately_usable_qty(),
+        )
