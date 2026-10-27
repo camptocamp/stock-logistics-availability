@@ -2,8 +2,8 @@
 # License AGPL-3.0 or later (http://www.gnu.org/licenses/agpl.html).
 
 from odoo import api, fields, models
-from odoo.osv import expression
-from odoo.tools import ormcache_context
+from odoo.fields import Domain
+from odoo.tools import ormcache
 
 
 class ProductProduct(models.Model):
@@ -45,7 +45,7 @@ class ProductProduct(models.Model):
         # _get_location_ids_excluded_from_immediately_usable_qty has already
         # resolved the children locations of the excluded locations.
         products_with_excluded_loc = self.with_context(
-            location=exclude_location_ids, strict=True
+            location=list(exclude_location_ids), strict=True
         )
 
         if dates_in_the_past:
@@ -70,7 +70,7 @@ class ProductProduct(models.Model):
             _domain_move_in_loc,
             _domain_move_out_loc,
         ) = products_with_excluded_loc._get_domain_locations()
-        domain_quant = [("product_id", "in", self.ids)] + domain_quant_loc
+        domain_quant = Domain("product_id", "in", self.ids) & domain_quant_loc
         quant = self.env["stock.quant"].with_context(active_test=False)
         return {
             product.id: quantity
@@ -82,8 +82,12 @@ class ProductProduct(models.Model):
         }
 
     @api.model
-    @ormcache_context(
-        "tuple(self.env.companies.ids)", keys=("tuple(location)", "tuple(warehouse)")
+    @ormcache(
+        "tuple(self.env.companies.ids)",
+        "str(self.env.context.get('location'))",
+        "str(self.env.context.get('search_location'))",
+        "str(self.env.context.get('warehouse_id'))",
+        "str(self.env.context.get('search_warehouse'))",
     )
     def _get_location_ids_excluded_from_immediately_usable_qty(self):
         """
@@ -101,7 +105,7 @@ class ProductProduct(models.Model):
                 ("usage", "in", ["internal", "transit"]),
             ]
         )
-        return locations.ids
+        return tuple(locations.ids)
 
     @api.model
     def _get_locations_excluded_from_immediately_usable_qty(self):
@@ -112,39 +116,17 @@ class ProductProduct(models.Model):
     @api.model
     def _get_domain_location_excluded_from_immediately_usable_qty(self):
         """
-        Parses the context and returns a list of location_ids based on it that
-        should be excluded from the immediately_usable_qty
+        Parses the context and returns a domain on the locations, in the scope
+        of the context, that should be excluded from the immediately_usable_qty
         """
-        location_domain = self.env[
-            "product.product"
-        ]._get_domain_location_for_locations()
-        return expression.AND(
-            [location_domain, [("exclude_from_immediately_usable_qty", "=", True)]]
+        # The quant domain restricts ``location_id`` to the locations of the
+        # context: apply the same restriction to the locations themselves.
+        quant_domain = self.env["product.product"]._get_domain_locations()[0]
+        location_domain = Domain(quant_domain).map_conditions(
+            lambda condition: Domain("id", condition.operator, condition.value)
+            if condition.field_expr == "location_id"
+            else condition
         )
-
-    def _get_domain_locations_new(self, location_ids):
-        # We override this method to add the possibility to work with a strict
-        # context parameter. This parameter is used to force the method to
-        # restrict the domain to the location_ids passed as parameter in place
-        # if considering all locations children of the location_ids.
-        # Prior to Odoo 16, this behavior was possible by setting the context
-        # parameter 'compute_child' to False. This parameter has been removed
-        # in Odoo 16 in commit https://github.com/odoo/odoo/commit/
-        # f054af31b098d8cb1ef64369e857a36c70918033 and reintroduced in Odoo >= 17
-        # in commit https://github.com/odoo/odoo/commit/
-        # add97b3c2dc1df70d22f87047cf012463f3e12c4 as 'strict' context parameter.
-        # The original design of this addon developped for Odoo 10 has always
-        # been to consider only the locations passed as parameter and not their
-        # children to avoid performance issues. This is why we reintroduce this
-        # behavior.
-        if not self.env.context.get("strict"):
-            return super()._get_domain_locations_new(location_ids)
-
-        location_ids = list(location_ids)
-        loc_domain = [("location_id", "in", location_ids)]
-        dest_loc_domain = [("location_dest_id", "in", location_ids)]
-        return (
-            loc_domain,
-            dest_loc_domain + ["!"] + loc_domain if loc_domain else dest_loc_domain,
-            loc_domain + ["!"] + dest_loc_domain if dest_loc_domain else loc_domain,
+        return location_domain & Domain(
+            "exclude_from_immediately_usable_qty", "=", True
         )

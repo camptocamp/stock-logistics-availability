@@ -39,7 +39,6 @@ class TestStockLogisticsWarehouse(TransactionCase):
             {
                 "location_id": self.supplier_location.id,
                 "location_dest_id": self.stock_location.id,
-                "name": "MOVE STOCK ",
                 "product_id": self.product.id,
                 "product_uom": self.product.uom_id.id,
                 "product_uom_qty": 15,
@@ -49,7 +48,6 @@ class TestStockLogisticsWarehouse(TransactionCase):
             {
                 "location_id": self.supplier_location.id,
                 "location_dest_id": self.pack_child_location.id,
-                "name": "MOVE PACK ",
                 "product_id": self.product.id,
                 "product_uom": self.product.uom_id.id,
                 "product_uom_qty": 5,
@@ -85,3 +83,10 @@ class TestStockLogisticsWarehouse(TransactionCase):
             set(excluded_location_ids),
             set(self.pack_location.ids + self.pack_child_location.ids),
         )
+
+    def test_get_excluded_location_ids_out_of_context_scope(self):
+        self.pack_location.exclude_from_immediately_usable_qty = True
+        excluded_location_ids = self.product.with_context(
+            location=self.stock_location.id
+        )._get_location_ids_excluded_from_immediately_usable_qty()
+        self.assertFalse(excluded_location_ids)
