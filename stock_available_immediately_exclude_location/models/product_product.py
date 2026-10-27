@@ -64,6 +64,7 @@ class ProductProduct(models.Model):
         "str(self.env.context.get('search_location'))",
         "str(self.env.context.get('warehouse_id'))",
         "str(self.env.context.get('search_warehouse'))",
+        "bool(self.env.context.get('strict'))",
     )
     def _get_location_ids_excluded_from_immediately_usable_qty(self):
         """Return the ids of the locations excluded from the immediately usable qty.
