@@ -7,14 +7,14 @@
         t-inherit="sale_stock.QtyAtDatePopover"
         t-inherit-mode="extension"
     >
-        <xpath expr="//table/tbody/t[1]" position="before">
+        <xpath expr="//table/tbody/t[1]" position="inside">
             <tr>
                 <td>
                     <strong>Available to promise</strong>
                 </td>
                 <td class="text-end">
                     <b t-out="props.record.data.immediately_usable_qty_today" />
-                    <t t-out="props.record.data.product_uom_id?.display_name" />
+                    <t t-out="props.record.data.product_uom_id[1]" />
                 </td>
             </tr>
         </xpath>
